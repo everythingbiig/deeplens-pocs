@@ -2,12 +2,13 @@ package com.everythingbiig.deeplens;
 
 
 import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-public class StoreRecognizedFacesInS3 {
+public class StoreRecognizedFacesInS3 implements RequestHandler<FaceRecognitionEvent, Void> {
     static final Logger logger = LogManager.getLogger(StoreRecognizedFacesInS3.class);
 
     private static final float RECOGNITION_THRESHOLD = 0.75f;
@@ -18,12 +19,8 @@ public class StoreRecognizedFacesInS3 {
 
     private static final String OUTPUT_KEY = "recognized_face.png";
 
-
-    public static void main(String[] args) {
-        // DO NOTHING
-    }
-
-    public void handleEvent(FaceRecognitionEvent event, Context context) {
+    @Override
+    public Void handleRequest(FaceRecognitionEvent event, Context context) {
         logger.debug("Got event: " + event);
         if(event == null) {
             logger.debug("Got empty result");
@@ -34,9 +31,6 @@ public class StoreRecognizedFacesInS3 {
             s3Client.copyObject("com.everythingbiig.deeplens/faces", "julioheadshot.png", OUTPUT_BUCKET, OUTPUT_KEY);
             logger.debug("Stored face.");
         }
-
+        return null;
     }
-//    private static void log(String msg) {
-//        System.out.println(msg);
-//    }
 }
