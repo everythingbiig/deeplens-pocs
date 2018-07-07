@@ -27,6 +27,7 @@ repositories {
 dependencies {
 //    compile 'com.amazonaws:aws-java-sdk:1.11.354'
     compile 'com.amazonaws:aws-java-sdk-s3:1.11.354'
+    compile 'com.amazonaws:aws-java-sdk-greengrass:1.11.362'
     compile 'com.amazonaws:aws-lambda-java-core:1.1.0'
 //    compile 'com.amazonaws:aws-lambda-java-events:2.1.0'
     compile 'com.amazonaws:aws-lambda-java-log4j:1.0.0'
