@@ -12,8 +12,8 @@ import numpy as np
 import awscam
 import cv2
 import greengrasssdk
-import uuid;
-import boto3;
+import uuid
+import boto3
 
 class LocalDisplay(Thread):
     """ Class for facilitating the local display of inference results
@@ -82,6 +82,7 @@ def greengrass_infinite_infer_run():
         output_map = {1: 'face'}
         # Create an IoT client for sending to messages to the cloud.
         client = greengrasssdk.client('iot-data')
+        s3Client = boto3.resource('s3')
         iot_topic = '$aws/things/{}/infer'.format(os.environ['AWS_IOT_THING_NAME'])
         # Create a local display instance that will dump the image bytes to a FIFO
         # file that the image can be rendered locally.
@@ -142,26 +143,19 @@ def greengrass_infinite_infer_run():
 
                     # Write the file to s3
                     try :
-                        # s3 = boto3.resource('s3')
-                        with open(recognizedFaceFullPath, 'rb') as content_file:
-                            content = content_file.read()
-                            cloud_output['image_data'] = content.encode('base64')
-                            client.publish(topic=iot_topic, payload='Read file contents, size is {}'.format(
-                                os.path.getsize(recognizedFaceFullPath)))
+                        s3Bucket = 'com.everythingbiig.deeplens'
+                        s3Key = 'faces/{}'.format(recogFaceFilename)
+                        client.publish(topic=iot_topic,
+                                       payload='Copying {} to {}/{}'.format(recognizedFaceFullPath, s3Bucket, s3Key))
+                        s3Client.Object(s3Bucket, s3Key).put(Body=open(recognizedFaceFullPath, 'rb'))
+                        client.publish(topic=iot_topic,
+                                       payload='Copied {} to {}/{}'.format(recognizedFaceFullPath, s3Bucket, s3Key))
 
-                        # s3Bucket = 'com.everythingbiig.deeplens'
-                        # s3Filename = 'faces/{}'.format(recogFaceFilename)
-                        # s3.Bucket(s3Bucket).upload_file(recognizedFaceFullPath, s3Filename)
-                        # bucket = s3.Bucket(s3Path)
-                        # bucket.put_object(
-                        #     ACL='bucket-owner-full-control',
-                        #     ContentType='image/png',
-                        #     StorageClass='ONEZONE_IA',
-                        #     Key=s3Filename,
-                        #     Body=content,
-                        # )
+                        cloud_output['image_size'] = os.path.getsize(recognizedFaceFullPath)
+                        cloud_output['image_bucket'] = s3Bucket
+                        cloud_output['image_key'] = s3Key
                     except Exception as s3Ex:
-                        client.publish(topic=iot_topic, payload='Error encoding file contents')
+                        client.publish(topic=iot_topic, payload='Error uploading file to S3:{}'.format(s3Ex))
 
                     # Amount to offset the label/probability text above the bounding box.
                     text_offset = 15
