@@ -14,6 +14,15 @@ import cv2
 import greengrasssdk
 import uuid
 import boto3
+import logging
+
+logger = logging.getLogger('deeplens_face_detection')
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 class LocalDisplay(Thread):
     """ Class for facilitating the local display of inference results
@@ -74,6 +83,39 @@ class LocalDisplay(Thread):
     def join(self):
         self.stop_request.set()
 
+def upload_to_s3(s3_client, path_to_file=None, s3_bucket='com.everythingbiig.deeplens', s3_key=None):
+    if os.path.isfile(path_to_file):
+        logger.debug('Copying %s to %s/%s', path_to_file, s3_bucket, s3_key)
+        s3_client.Object(s3_bucket, s3_key).put(Body=open(path_to_file, 'rb'))
+        logger.debug('Copied %s to %s/%s', path_to_file, s3_bucket, s3_key)
+    else:
+        logger.debug('The file %s does not exist %s', path_to_file)
+
+def save_file(frame, full_path=None):
+    # Ensure the faces dir exists
+    try:
+        logger.debug('Saving frame to file %s', full_path)
+        if not os.path.exists(os.path.dirname(full_path)):
+            os.makedirs(os.path.dirname(full_path))
+        cv2.imwrite(full_path, frame)
+        logger.debug('Saved frame to file %s', full_path)
+    except Exception as io_error:
+        logger.error('Error saving file %s', exc_info=1)
+
+
+
+def delete_file(full_path=None):
+    # clean up after ourselves
+    try:
+        if os.path.isfile(full_path):
+            logger.debug('Deleting file %s', full_path)
+            os.remove(full_path)
+            logger.debug('Deleted file %s', full_path)
+        else:
+            logger.debug('The file %s does not exist', full_path)
+    except Exception as ex:
+        logger.error('Error deleting file %s', exc_info=1)
+
 def greengrass_infinite_infer_run():
     """ Entry point of the lambda function"""
     try:
@@ -92,9 +134,9 @@ def greengrass_infinite_infer_run():
         # path is required.
         model_path = '/opt/awscam/artifacts/mxnet_deploy_ssd_FP16_FUSED.xml'
         # Load the model onto the GPU.
-        client.publish(topic=iot_topic, payload='Loading face detection model')
+        client.publish(topic=iot_topic, payload='INFO: Loading face detection model')
         model = awscam.Model(model_path, {'GPU': 1})
-        client.publish(topic=iot_topic, payload='Face detection model loaded')
+        client.publish(topic=iot_topic, payload='INFO: Face detection model loaded')
         # Set the threshold for detection
         detection_threshold = 0.75
         # The height and width of the training set images
@@ -124,6 +166,12 @@ def greengrass_infinite_infer_run():
             # Get the detected faces and probabilities
             for obj in parsed_inference_results[model_type]:
                 if obj['prob'] > detection_threshold:
+                    # Save the raw inference results
+                    # cloud_output['raw_inference_results'] = json.dumps(raw_inference_results,
+                    #                                                    separators=(',', ':'),
+                    #                                                    sort_keys=True,
+                    #                                                    indent=4,
+                    #                                                    cls=NumpyEncoder)
                     # Add bounding boxes to full resolution frame
                     xmin = int(xscale * obj['xmin']) \
                            + int((obj['xmin'] - input_width/2) + input_width/2)
@@ -135,29 +183,26 @@ def greengrass_infinite_infer_run():
                     # for more information about the cv2.rectangle method.
                     # Method signature: image, point1, point2, color, and tickness.
                     cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 165, 20), 10)
-                    # Save the recognized face
-                    frame_scaled = frame[ymin:ymax,xmin:xmax]
-                    recog_face_filename = 'recognized_face_{}.png'.format(uuid.uuid4())
-                    recognized_face_full_path = '/tmp/{}'.format(recog_face_filename)
-                    cv2.imwrite(recognized_face_full_path, frame_scaled)
-                    client.publish(topic=iot_topic, payload='Wrote recognized face to {}'.format(recog_face_filename))
-
-                    # Write the file to s3
                     try :
+                        # Save the recognized face
+                        frame_scaled = frame[ymin:ymax, xmin:xmax]
+                        recog_face_filename = 'recognized_face_{}.png'.format(uuid.uuid4())
+                        recognized_face_full_path = '/tmp/faces/{}'.format(recog_face_filename)
+                        save_file(frame=frame_scaled, full_path=recognized_face_full_path)
+                        # Upload the file to s3
+
                         s3_bucket = 'com.everythingbiig.deeplens'
                         s3_key = 'faces/{}'.format(recog_face_filename)
-                        client.publish(topic=iot_topic,
-                                       payload='Copying {} to {}/{}'.format(recognized_face_full_path, s3_bucket, s3_key))
-                        s3_client.Object(s3_bucket, s3_key).put(Body=open(recognized_face_full_path, 'rb'))
-                        client.publish(topic=iot_topic,
-                                       payload='Copied {} to {}/{}'.format(recognized_face_full_path, s3_bucket, s3_key))
 
+                        upload_to_s3(s3_client=s3_client, path_to_file=recognized_face_full_path, s3_key=s3_key);
+
+                        # save the file meta data
                         cloud_output['image_size'] = os.path.getsize(recognized_face_full_path)
                         cloud_output['image_bucket'] = s3_bucket
                         cloud_output['image_key'] = s3_key
-                        cloud_output['raw_inference_results'] = raw_inference_results;
-                    except Exception as s3Ex:
-                        client.publish(topic=iot_topic, payload='Error uploading file to S3:{}'.format(s3Ex))
+                    except Exception as s3_ex:
+                        logger.error('Error processing recognized face %s', exc_info=1)
+                        client.publish(topic=iot_topic, payload='ERROR: Error processing recognized face:{}'.format(s3_ex))
 
                     # Amount to offset the label/probability text above the bounding box.
                     text_offset = 15
@@ -172,7 +217,8 @@ def greengrass_infinite_infer_run():
                     cloud_output[output_map[obj['label']]] = obj['prob']
                     # cloud_output['filename'] = recogFaceFilename
                     # clean up after ourselves
-                    os.remove(recognized_face_full_path);
+                    delete_file(full_path=recognized_face_full_path)
+
             # Set the next frame in the local display stream.
             local_display.set_frame_data(frame)
             # Send results to the cloud
