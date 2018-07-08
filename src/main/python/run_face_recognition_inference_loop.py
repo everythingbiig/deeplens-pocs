@@ -82,7 +82,7 @@ def greengrass_infinite_infer_run():
         output_map = {1: 'face'}
         # Create an IoT client for sending to messages to the cloud.
         client = greengrasssdk.client('iot-data')
-        s3Client = boto3.resource('s3')
+        s3_client = boto3.resource('s3')
         iot_topic = '$aws/things/{}/infer'.format(os.environ['AWS_IOT_THING_NAME'])
         # Create a local display instance that will dump the image bytes to a FIFO
         # file that the image can be rendered locally.
@@ -112,8 +112,9 @@ def greengrass_infinite_infer_run():
             # the parser API, note it is possible to get the output of doInference
             # and do the parsing manually, but since it is a ssd model,
             # a simple API is provided.
+            raw_inference_results = model.doInference(frame_resize);
             parsed_inference_results = model.parseResult(model_type,
-                                                         model.doInference(frame_resize))
+                                                         raw_inference_results)
             # Compute the scale in order to draw bounding boxes on the full resolution
             # image.
             yscale = float(frame.shape[0]/input_height)
@@ -136,24 +137,25 @@ def greengrass_infinite_infer_run():
                     cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 165, 20), 10)
                     # Save the recognized face
                     frame_scaled = frame[ymin:ymax,xmin:xmax]
-                    recogFaceFilename = 'recognized_face_{}.png'.format(uuid.uuid4())
-                    recognizedFaceFullPath = '/tmp/{}'.format(recogFaceFilename)
-                    cv2.imwrite(recognizedFaceFullPath, frame_scaled)
-                    client.publish(topic=iot_topic, payload='Wrote recognized face to {}'.format(recogFaceFilename))
+                    recog_face_filename = 'recognized_face_{}.png'.format(uuid.uuid4())
+                    recognized_face_full_path = '/tmp/{}'.format(recog_face_filename)
+                    cv2.imwrite(recognized_face_full_path, frame_scaled)
+                    client.publish(topic=iot_topic, payload='Wrote recognized face to {}'.format(recog_face_filename))
 
                     # Write the file to s3
                     try :
-                        s3Bucket = 'com.everythingbiig.deeplens'
-                        s3Key = 'faces/{}'.format(recogFaceFilename)
+                        s3_bucket = 'com.everythingbiig.deeplens'
+                        s3_key = 'faces/{}'.format(recog_face_filename)
                         client.publish(topic=iot_topic,
-                                       payload='Copying {} to {}/{}'.format(recognizedFaceFullPath, s3Bucket, s3Key))
-                        s3Client.Object(s3Bucket, s3Key).put(Body=open(recognizedFaceFullPath, 'rb'))
+                                       payload='Copying {} to {}/{}'.format(recognized_face_full_path, s3_bucket, s3_key))
+                        s3_client.Object(s3_bucket, s3_key).put(Body=open(recognized_face_full_path, 'rb'))
                         client.publish(topic=iot_topic,
-                                       payload='Copied {} to {}/{}'.format(recognizedFaceFullPath, s3Bucket, s3Key))
+                                       payload='Copied {} to {}/{}'.format(recognized_face_full_path, s3_bucket, s3_key))
 
-                        cloud_output['image_size'] = os.path.getsize(recognizedFaceFullPath)
-                        cloud_output['image_bucket'] = s3Bucket
-                        cloud_output['image_key'] = s3Key
+                        cloud_output['image_size'] = os.path.getsize(recognized_face_full_path)
+                        cloud_output['image_bucket'] = s3_bucket
+                        cloud_output['image_key'] = s3_key
+                        cloud_output['raw_inference_results'] = raw_inference_results;
                     except Exception as s3Ex:
                         client.publish(topic=iot_topic, payload='Error uploading file to S3:{}'.format(s3Ex))
 
@@ -170,7 +172,7 @@ def greengrass_infinite_infer_run():
                     cloud_output[output_map[obj['label']]] = obj['prob']
                     # cloud_output['filename'] = recogFaceFilename
                     # clean up after ourselves
-                    os.remove(recognizedFaceFullPath);
+                    os.remove(recognized_face_full_path);
             # Set the next frame in the local display stream.
             local_display.set_frame_data(frame)
             # Send results to the cloud
