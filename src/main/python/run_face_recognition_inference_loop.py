@@ -142,12 +142,16 @@ def greengrass_infinite_infer_run():
 
                     # Write the file to s3
                     try :
-                        s3 = boto3.resource('s3')
-                        # with open(recognizedFaceFullPath, 'r') as content_file:
-                        #     content = content_file.read()
-                        s3Bucket = 'com.everythingbiig.deeplens'
-                        s3Filename = 'faces/{}'.format(recogFaceFilename)
-                        s3.Bucket(s3Bucket).upload_file(recognizedFaceFullPath, s3Filename)
+                        # s3 = boto3.resource('s3')
+                        with open(recognizedFaceFullPath, 'rb') as content_file:
+                            content = content_file.read()
+                            cloud_output['image_data'] = content.encode('base64')
+                            client.publish(topic=iot_topic, payload='Read file contents, size is {}'.format(
+                                os.path.getsize(recognizedFaceFullPath)))
+
+                        # s3Bucket = 'com.everythingbiig.deeplens'
+                        # s3Filename = 'faces/{}'.format(recogFaceFilename)
+                        # s3.Bucket(s3Bucket).upload_file(recognizedFaceFullPath, s3Filename)
                         # bucket = s3.Bucket(s3Path)
                         # bucket.put_object(
                         #     ACL='bucket-owner-full-control',
@@ -157,7 +161,7 @@ def greengrass_infinite_infer_run():
                         #     Body=content,
                         # )
                     except Exception as s3Ex:
-                        client.publish(topic=iot_topic, payload='S3UploadError: {}'.format(s3Ex))
+                        client.publish(topic=iot_topic, payload='Error encoding file contents')
 
                     # Amount to offset the label/probability text above the bounding box.
                     text_offset = 15
@@ -170,7 +174,7 @@ def greengrass_infinite_infer_run():
                                 cv2.FONT_HERSHEY_SIMPLEX, 2.5, (255, 165, 20), 6)
                     # Store label and probability and file name
                     cloud_output[output_map[obj['label']]] = obj['prob']
-                    cloud_output['filename'] = recogFaceFilename
+                    # cloud_output['filename'] = recogFaceFilename
                     # clean up after ourselves
                     os.remove(recognizedFaceFullPath);
             # Set the next frame in the local display stream.
