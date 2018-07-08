@@ -13,6 +13,7 @@ import awscam
 import cv2
 import greengrasssdk
 import uuid;
+import boto3;
 
 class LocalDisplay(Thread):
     """ Class for facilitating the local display of inference results
@@ -134,9 +135,29 @@ def greengrass_infinite_infer_run():
                     cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), (255, 165, 20), 10)
                     # Save the recognized face
                     frame_scaled = frame[ymin:ymax,xmin:xmax]
-                    recogFaceFilename = '/tmp/recognized_face_{}.png'.format(uuid.uuid4())
-                    cv2.imwrite(recogFaceFilename, frame_scaled)
+                    recogFaceFilename = 'recognized_face_{}.png'.format(uuid.uuid4())
+                    recognizedFaceFullPath = '/tmp/{}'.format(recogFaceFilename)
+                    cv2.imwrite(recognizedFaceFullPath, frame_scaled)
                     client.publish(topic=iot_topic, payload='Wrote recognized face to {}'.format(recogFaceFilename))
+
+                    # Write the file to s3
+                    try :
+                        s3 = boto3.resource('s3')
+                        # with open(recognizedFaceFullPath, 'r') as content_file:
+                        #     content = content_file.read()
+                        s3Bucket = 'com.everythingbiig.deeplens'
+                        s3Filename = 'faces/{}'.format(recogFaceFilename)
+                        s3.Bucket(s3Bucket).upload_file(recognizedFaceFullPath, s3Filename)
+                        # bucket = s3.Bucket(s3Path)
+                        # bucket.put_object(
+                        #     ACL='bucket-owner-full-control',
+                        #     ContentType='image/png',
+                        #     StorageClass='ONEZONE_IA',
+                        #     Key=s3Filename,
+                        #     Body=content,
+                        # )
+                    except Exception as s3Ex:
+                        client.publish(topic=iot_topic, payload='S3UploadError: {}'.format(s3Ex))
 
                     # Amount to offset the label/probability text above the bounding box.
                     text_offset = 15
@@ -151,7 +172,7 @@ def greengrass_infinite_infer_run():
                     cloud_output[output_map[obj['label']]] = obj['prob']
                     cloud_output['filename'] = recogFaceFilename
                     # clean up after ourselves
-                    os.remove(recogFaceFilename);
+                    os.remove(recognizedFaceFullPath);
             # Set the next frame in the local display stream.
             local_display.set_frame_data(frame)
             # Send results to the cloud
