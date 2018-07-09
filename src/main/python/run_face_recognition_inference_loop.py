@@ -192,7 +192,7 @@ def greengrass_infinite_infer_run():
                         # Upload the file to s3
 
                         s3_bucket = 'com.everythingbiig.deeplens'
-                        s3_key = 'faces/{}'.format(recog_face_filename)
+                        s3_key = 'faces/unprocessed/{}'.format(recog_face_filename)
 
                         upload_to_s3(s3_client=s3_client, path_to_file=recognized_face_full_path, s3_key=s3_key);
 

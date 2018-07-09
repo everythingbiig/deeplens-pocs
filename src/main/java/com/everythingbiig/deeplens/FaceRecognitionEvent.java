@@ -2,9 +2,9 @@ package com.everythingbiig.deeplens;
 
 public class FaceRecognitionEvent {
     private float face;
-    private float imageSize;
-    private String imageBucket;
-    private String imageKey;
+    private float image_size;
+    private String image_bucket;
+    private String image_key;
 
     public FaceRecognitionEvent() {
 
@@ -19,32 +19,38 @@ public class FaceRecognitionEvent {
         this.face = face;
     }
 
-    public float getImageSize() {
-        return imageSize;
+    public float getImage_size() {
+        return image_size;
     }
 
-    public void setImageSize(float imageSize) {
-        this.imageSize = imageSize;
+    public void setImage_size(float image_size) {
+        this.image_size = image_size;
     }
 
-    public String getImageBucket() {
-        return imageBucket;
+    public String getImage_bucket() {
+        return image_bucket;
     }
 
-    public void setImageBucket(String imageBucket) {
-        this.imageBucket = imageBucket;
+    public void setImage_bucket(String image_bucket) {
+        this.image_bucket = image_bucket;
     }
 
-    public String getImageKey() {
-        return imageKey;
+    public String getImage_key() {
+        return image_key;
     }
 
-    public void setImageKey(String imageKey) {
-        this.imageKey = imageKey;
+    public void setImage_key(String image_key) {
+        this.image_key = image_key;
     }
 
     public String toString() {
-        return String.format("{face:%3.4f}",face);
+        StringBuilder sb = new StringBuilder("{\n");
+        sb.append("\tface:").append(face).append(",")
+                .append("\timage_size:").append(getImage_size()).append("\n")
+                .append("\timage_bucket:").append(getImage_bucket()).append("\n")
+                .append("\timage_key:").append(getImage_key()).append("\n");
+        sb.append("}");
+        return sb.toString();
     }
 
 }
