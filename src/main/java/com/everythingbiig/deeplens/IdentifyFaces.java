@@ -30,9 +30,9 @@ public class IdentifyFaces implements RequestHandler<FaceRecognitionEvent, Void>
 
     private static final AmazonSimpleEmailService sesClient = AmazonSimpleEmailServiceClientBuilder.defaultClient();
     
-    private static final String targetImageKey = "faces/known/julio.jpg";
+    private static final String targetImageKey = System.getProperty("identification.targetImageKey");
 
-    private static final List<String> toAddresses = Arrays.asList(new String[]{"julio.r.santos.jr@gmail.com"});
+    private static final List<String> toAddresses = Arrays.asList(new String[]{System.getProperty("identification.toEmail")});
 
     @Override
     public Void handleRequest(FaceRecognitionEvent event, Context context) {
@@ -79,7 +79,7 @@ public class IdentifyFaces implements RequestHandler<FaceRecognitionEvent, Void>
         msg.setBody(body);
 
         request.setMessage(msg);
-        request.setSource("julio.r.santos.jr@gmail.com");
+        request.setSource(System.getProperty("identification.fromEmail"));
         return request;
     }
 
